@@ -72,21 +72,25 @@ void swap(unsigned char *a, unsigned char *b);
 void draw_rectangle(PRECT r);
 void draw_polygon(PPOLYPOINT polygon);
 
+// Lab 4
+void my_irq_handler(void);
+
 void main(void)
 {
 	graphic_initalize();
 	graphic_clear_screen();
+	
+	POLYPOINT pg8 = {20, 20, 0};
+	POLYPOINT pg7 = {20, 55, &pg8};
+	POLYPOINT pg6 = {70, 60, &pg7};
+	POLYPOINT pg5 = {80, 35, &pg6};
+	POLYPOINT pg4 = {100, 25, &pg5};
+	POLYPOINT pg3 = {90, 10, &pg4};
+	POLYPOINT pg2 = {40, 10, &pg3};
+	POLYPOINT pg1 = {20, 20, &pg2};
 	while(1)
 	{
 		// Resetting the values everytime it runs because sometimes it might change some values. 
-		POLYPOINT pg8 = {20, 20, 0};
-		POLYPOINT pg7 = {20, 55, &pg8};
-		POLYPOINT pg6 = {70, 60, &pg7};
-		POLYPOINT pg5 = {80, 35, &pg6};
-		POLYPOINT pg4 = {100, 25, &pg5};
-		POLYPOINT pg3 = {90, 10, &pg4};
-		POLYPOINT pg2 = {40, 90, &pg3};
-		POLYPOINT pg1 = {20, 20, &pg2};
 		while (1)
 		{
 			draw_polygon(&pg1);
@@ -102,9 +106,6 @@ void init_app(void)
 {
 	// Need to intials the outport 
 	*((unsigned long *) 0x40023830) = 0x18;
-
-	// Port E för usage of LCD
-	*portModer = 0x55555555;
 
 }
 
@@ -343,6 +344,14 @@ void draw_polygon(PPOLYPOINT polygon)
 		p0.x = p1.x; p0.y = p1.y;
 		ptr = ptr->next;
 	}
+}
+
+// ------------------------------------------------------- Interrupt ------------------------------------------------------------------------------- //
+void my_irq_handler(void)
+{
+	// tänd diodramp på port D 
+	//*GPIO_D_MODER = 0x00005555;
+	//*GPIO_D_ODR_LOW = 0xFF;
 }
 
 

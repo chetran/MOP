@@ -4,36 +4,6 @@
 #include "startup.h"
 #include <stdlib.h>
 
-// ------------------------------------------------------- MD407 BUILT IN FUNCTIONS ------------------------------------------------------------------------------- //
-__attribute__((naked))
-void graphic_initalize(void)
-{
-	__asm volatile (" .HWORD 0xDFF0\n");
-	__asm volatile (" BX LR\n");
-}
-
-__attribute__((naked))
-void graphic_clear_screen(void)
-{
-	__asm volatile (" .HWORD 0xDFF1\n");
-	__asm volatile (" BX LR\n");
-}
-
-__attribute__((naked))
-void graphic_pixel_set(void)
-{
-	__asm volatile (" .HWORD 0xDFF2\n");
-	__asm volatile (" BX LR\n");
-}
-
-__attribute__((naked))
-void graphic_pixel_clear(void)
-{
-	__asm volatile (" .HWORD 0xDFF3\n");
-	__asm volatile (" BX LR\n");
-}
-
-
 // In startup.c are functions defined that is built in for processor MD407.
 
 // From delay.c
@@ -91,30 +61,40 @@ typedef struct
 	unsigned char x,y;
 } RECT, *PRECT;
 
+typedef struct polygonpoint
+{
+	char x,y;
+	struct polygonpoint *next;
+} POLYPOINT, *PPOLYPOINT;
+
 int draw_line(PLINE l);
 void swap(unsigned char *a, unsigned char *b);
 void draw_rectangle(PRECT r);
+void draw_polygon(PPOLYPOINT polygon);
 
 void main(void)
 {
 	graphic_initalize();
 	graphic_clear_screen();
+	
+	POLYPOINT pg8 = {20, 20, 0};
+	POLYPOINT pg7 = {20, 55, &pg8};
+	POLYPOINT pg6 = {70, 60, &pg7};
+	POLYPOINT pg5 = {80, 35, &pg6};
+	POLYPOINT pg4 = {100, 25, &pg5};
+	POLYPOINT pg3 = {90, 10, &pg4};
+	POLYPOINT pg2 = {40, 10, &pg3};
+	POLYPOINT pg1 = {20, 20, &pg2};
 	while(1)
 	{
 		// Resetting the values everytime it runs because sometimes it might change some values. 
-		RECT rectangles[] = {
-			{10, 10, 20, 10},
-			{25, 25, 10, 20},
-			{40, 30, 70, 20},
-			{60, 35, 10, 10},
-			{70, 10, 5, 5},
-		};
-		for (int i = 0; i < sizeof(rectangles)/sizeof(RECT); i++)
+		while (1)
 		{
-			draw_rectangle(&rectangles[i]);
-			delay_milli(1);
+			draw_polygon(&pg1);
+			delay_milli(2);
+			//graphic_clear_screen();
 		}
-		graphic_clear_screen();
+		
 	}	
 
 }
@@ -166,6 +146,7 @@ void delay_milli(unsigned int ms)
 		ms++;
 	#endif
 	// 1000 µs = 1 ms 
+	
 	delay_micro(ms * 1000);
 }
 
@@ -324,7 +305,7 @@ int draw_line(PLINE l)
 		else
 			graphic_pixel_set(x, y);
 		error = error + deltay;
-		if (2 * error >= deltax)a
+		if (2 * error >= deltax)
 		{
 			y = y +ystep;
 			error = error - deltax;
@@ -346,3 +327,23 @@ void draw_rectangle(PRECT r)
 	start.x = r->p.x + r->x; start.y = r->p.y + r->y; end.x = r->p.x; end.y = r->p.y + r->y; side.p0 = start; side.p1 = end; draw_line(&side);
 	start.x = r->p.x; start.y = r->p.y + r->y; end.x = r->p.x; end.y = r->p.y; side.p0 = start; side.p1 = end; draw_line(&side);
 }
+
+void draw_polygon(PPOLYPOINT polygon)
+{
+	POLYPOINT p0;
+	p0.x = polygon->x;
+	p0.y = polygon->y;
+	PPOLYPOINT ptr = polygon->next;
+	while (ptr != 0) 
+	{
+		POLYPOINT p1;
+		p1.x = ptr->x;
+		p1.y = ptr->y;
+		LINE side = {{p0.x, p0.y}, {p1.x, p1.y}};
+		draw_line(&side);
+		p0.x = p1.x; p0.y = p1.y;
+		ptr = ptr->next;
+	}
+}
+
+

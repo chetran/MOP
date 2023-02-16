@@ -72,6 +72,9 @@ void swap(unsigned char *a, unsigned char *b);
 void draw_rectangle(PRECT r);
 void draw_polygon(PPOLYPOINT polygon);
 
+// Lab 4
+void my_irq_handler(void);
+
 void main(void)
 {
 	graphic_initalize();
@@ -103,9 +106,6 @@ void init_app(void)
 {
 	// Need to intials the outport 
 	*((unsigned long *) 0x40023830) = 0x18;
-
-	// Port E för usage of LCD
-	*portModer = 0x55555555;
 
 }
 
@@ -344,6 +344,14 @@ void draw_polygon(PPOLYPOINT polygon)
 		p0.x = p1.x; p0.y = p1.y;
 		ptr = ptr->next;
 	}
+}
+
+// ------------------------------------------------------- Interrupt ------------------------------------------------------------------------------- //
+void my_irq_handler(void)
+{
+	// tänd diodramp på port D 
+	//*GPIO_D_MODER = 0x00005555;
+	//*GPIO_D_ODR_LOW = 0xFF;
 }
 
 

@@ -11,6 +11,10 @@
 #define STK_CTRL (volatile unsigned int *) 0xE000E010 
 #define STK_LOAD (volatile unsigned int *) 0xE000E014 
 #define STK_VAL (volatile unsigned int *) 0xE000E018 
+#define GPIO_D 0x40020C00
+#define GPIO_ODR_HIGH ((volatile unsigned char *)   (GPIO_D+0x15))
+#define GPIO_ODR_LOW ((volatile unsigned char *)   (GPIO_D+0x14))
+#define GPIO_IDR_HIGH ((volatile unsigned char *)   (GPIO_D+0x11))
 // For asciidisplay.c
 #define PORT_BASE 0x40021000 // Port E 
 #define portModer ((volatile unsigned int *)  PORT_BASE)
@@ -26,7 +30,7 @@
 #define B_RW 2
 #define B_RS 1
 
-// Functions from asciidisplay.c
+void init_app(void);
 void delay_250ns(void);
 void delay_micro(unsigned int ms);
 void delay_milli(unsigned int ms);
@@ -43,6 +47,12 @@ void ascii_command(unsigned char command);
 void ascii_init(void);
 void ascii_write_char(unsigned char c);
 void ascii_gotoxy(int x, int y);
+
+unsigned char keyb(void);
+int ReadColumn( void );
+void ActivateRow( unsigned int row );
+
+#define MAX_POINTS 30
 
 // LCD MODULE
 typedef struct 
@@ -67,45 +77,119 @@ typedef struct polygonpoint
 	struct polygonpoint *next;
 } POLYPOINT, *PPOLYPOINT;
 
+typedef struct
+{
+	int numpoints;
+	int sizex;
+	int sizey;
+	POINT px[MAX_POINTS];
+} GEOMETRY, *PGEOMETRY;
+
+typedef struct tObj
+{
+	PGEOMETRY geo;
+	int dirx, diry;
+	int posx, posy;
+	void (* draw) (struct tObj *);
+	void (* clear) (struct tObj *);
+	void (* move) (struct tObj *);
+	void (* set_speed) (struct tObj *, int, int);
+} OBJECT, *POBJECT;
+
 int draw_line(PLINE l);
 void swap(unsigned char *a, unsigned char *b);
 void draw_rectangle(PRECT r);
 void draw_polygon(PPOLYPOINT polygon);
+void draw_ballobject(POBJECT o);
+void clear_ballobject(POBJECT o);
+void move_ballobject(POBJECT o);
+void set_ballobject_speed(POBJECT o, int speedx, int speedy);
+void move_paddle(POBJECT p);
+void bounce(POBJECT paddle, POBJECT ball);
+int gameover(POBJECT b);
 
 // Lab 4
 void my_irq_handler(void);
 
+// PONG BALL 
+GEOMETRY ball_geometry = 
+{
+	12,
+	4,4,
+	{
+		{0,1},{0,2},{1,0},{1,1},{1,2},{1,3},{2,0},{2,1},{2,2},{2,3},{3,1},{3,2}
+	}
+};
+
+static OBJECT ballobject =
+{
+	&ball_geometry,
+	7,1,
+	1,1,
+	draw_ballobject,
+	clear_ballobject,
+	move_ballobject,
+	set_ballobject_speed,
+};
+
+// paddle
+GEOMETRY paddle = 
+{
+	27,
+	5,9,
+	{
+		{0,0},{1,0},{2,0},{3,0},{4,0},{4,1},{4,2},{4,3},{4,4},{4,5},{4,6},{4,7},{4,8},{3,8},{2,8},{1,8},{0,8},{0,7},{0,6},{0,5},{0,4},{0,3},{0,2},{0,1},{2,3},{2,4},{2,5}
+	}
+};
+
+static OBJECT paddle_object = 
+{
+	&paddle,
+	0,0,
+	115,25,
+	draw_ballobject,
+	clear_ballobject,
+	move_paddle,
+	set_ballobject_speed,
+};
+
 void main(void)
 {
+	char c;
+	POBJECT p = &ballobject;
+	POBJECT r = &paddle_object;
+	init_app();
 	graphic_initalize();
 	graphic_clear_screen();
-	
-	POLYPOINT pg8 = {20, 20, 0};
-	POLYPOINT pg7 = {20, 55, &pg8};
-	POLYPOINT pg6 = {70, 60, &pg7};
-	POLYPOINT pg5 = {80, 35, &pg6};
-	POLYPOINT pg4 = {100, 25, &pg5};
-	POLYPOINT pg3 = {90, 10, &pg4};
-	POLYPOINT pg2 = {40, 10, &pg3};
-	POLYPOINT pg1 = {20, 20, &pg2};
 	while(1)
 	{
-		// Resetting the values everytime it runs because sometimes it might change some values. 
-		while (1)
+		r->move(r);
+		bounce(r, p);
+		p->move(p);
+		if (gameover(p))
+			break;
+		delay_micro(100);
+		c = keyb();
+		switch(c)
 		{
-			draw_polygon(&pg1);
-			delay_milli(2);
-			//graphic_clear_screen();
+			case 9: r->set_speed(r, 0, 5); break;
+			case 3: r->set_speed(r, 0, -5); break;
+			default: r->set_speed(r, 0, 0); break;
 		}
-		
-	}	
-
+	}
 }
 
 void init_app(void)
 {
 	// Need to intials the outport 
 	*((unsigned long *) 0x40023830) = 0x18;
+
+    *((volatile unsigned int *)0x40020C08) = 0x55555555; // MEDIUM SPEED
+    * ( (volatile unsigned int *) 0x40020C00) &= 0x00000000; // MODER CONFIG
+    * ( (volatile unsigned int *) 0x40020C00) |= 0x55005555; // MODER CONFIG
+    * ( (volatile unsigned short *) 0x40020C04) &= 0x0000; // TYPER CONFIG
+    * ( (volatile unsigned int *) 0x40020C0C) &= 0x00000000; // PUPDR CONFIG
+    * ( (volatile unsigned int *) 0x40020C0C) |= 0x0000AAAA; // PUPDR CONFIG
 
 }
 
@@ -150,7 +234,68 @@ void delay_milli(unsigned int ms)
 	delay_micro(ms * 1000);
 }
 
-// ------------------------------------------------------- ASCII DISPLAY ------------------------------------------------------------------------------- //
+// ------------------------------------------------------- keypad ------------------------------------------------------------------------------- //
+
+void ActivateRow( unsigned int row )
+{
+
+    /* Aktivera angiven rad hos tangentbordet, eller
+
+    * deaktivera samtliga */
+    switch( row )
+    {
+    case 1: *GPIO_ODR_HIGH = 0x10; break;
+    case 2: *GPIO_ODR_HIGH = 0x20; break;
+    case 3: *GPIO_ODR_HIGH = 0x40; break;
+    case 4: *GPIO_ODR_HIGH = 0x80; break;
+    case 0: *GPIO_ODR_HIGH = 0x00; break;
+
+    }
+
+}
+
+int ReadColumn( void )
+{
+
+    /* Om någon tangent (i aktiverad rad)
+
+    * är nedtryckt, returnera dess kolumnnummer,
+
+    * annars, returnera 0 */
+    unsigned char c;
+    c = *GPIO_IDR_HIGH;
+    if ( c & 0x8 )
+        return 4;
+    if ( c & 0x4 )
+        return 3;
+    if ( c & 0x2 )
+        return 2;
+    if ( c & 0x1 )
+        return 1;
+
+    return 0;
+}
+
+unsigned char keyb(void)
+{
+
+    unsigned char key[]={1,2,3,0xA,4,5,6,0xB,7,8,9,0xC,0xE,0,0xF,0xD};
+
+    int row, col;
+    for(row=1; row <=4 ; row++ )
+    {
+        ActivateRow( row );
+        if( (col = ReadColumn () ) )
+        {
+            ActivateRow( 0 );
+            return key [4*(row-1)+(col-1) ];
+        }
+    }
+    ActivateRow( 0 );
+    return  0xFF;
+}
+
+// ------------------------------------------------------- Ascii display ------------------------------------------------------------------------------- //
 // B_SELECT is needed here to activate the ascii display
 void ascii_ctrl_bit_set(char x)
 {
@@ -167,7 +312,6 @@ void ascii_ctrl_bit_clear(char x)
 	*portOdrLow = B_SELECT | c;
 }
 
-// The commented time is the required time for MD407 to perform a certain task. More time doens't affect anything only less time. 
 void ascii_write_controller(unsigned char byte)
 {
 	// These delays are need for the processor to execute the respective functions.
@@ -344,6 +488,111 @@ void draw_polygon(PPOLYPOINT polygon)
 		p0.x = p1.x; p0.y = p1.y;
 		ptr = ptr->next;
 	}
+}
+
+// ------------------------------------------------------- Objects ------------------------------------------------------------------------------- //
+void draw_ballobject(POBJECT o)
+{
+	int pixels = o->geo->numpoints;
+
+	for (int i = 0; i < pixels; i++)
+	{
+		// (o->geo->px+i) gets the position of one of the pixels and then the period after gets x/y value of that point
+		int testx = o->posx + (o->geo->px+i)->x;
+		int testy = o->posy + (o->geo->px+i)->y;
+		graphic_pixel_set(o->posx + (o->geo->px+i)->x, o->posy + (o->geo->px+i)->y);
+	}
+
+}
+
+void clear_ballobject(POBJECT o)
+{
+	int pixels = o->geo->numpoints;
+	for (int i = 0; i < pixels; i++)
+	{
+		graphic_pixel_clear(o->posx + (o->geo->px+i)->x, o->posy + (o->geo->px+i)->y);
+	}
+
+}
+
+void move_ballobject(POBJECT o)
+{
+	clear_ballobject(o);
+	int newx = o->dirx + o->posx;
+	int newy = o->diry + o->posy;
+	if (newx < 1) // touches left side
+	{
+		// if its towards the left side x dir is negative which means we need to set it as positive 
+		o->dirx = abs(o->dirx);
+		newx = o->dirx + o->posx;
+	}	
+	if (newx > 128) // touches right side
+	{
+		// if it touches right side x dir is positive and we need to set it negative. 
+		o->dirx = -(o->dirx);
+		newx = o->dirx + o->posx;
+	}
+	if (newy < 1) // touches top side
+	{
+		o->diry = abs(o->diry);
+		newy = o->diry + o->posy;
+	}
+	if (newy > 64) // touches bottom side
+	{
+		o->diry = -(o->diry);
+		newy = o->diry + o->posy;
+	}
+	o->posx = newx;
+	o->posy = newy;
+	draw_ballobject(o);
+}
+
+void set_ballobject_speed(POBJECT o, int speedx, int speedy)
+{
+	o->dirx = speedx;
+	o->diry = speedy;
+}
+
+void move_paddle(POBJECT p)
+{
+	clear_ballobject(p);
+	int newy = p->posy + p->diry;
+	if (newy > -1 && newy < 60)
+		p->posy = newy;
+	draw_ballobject(p);
+}
+
+void bounce(POBJECT paddle, POBJECT ball)
+{
+	int ballx = ball->posx + ball->dirx;
+	int bally = ball->posy;
+	int paddlex = paddle->posx;
+	int paddley = paddle->posy;
+	int dir = -ball->dirx;
+	if (ballx >= paddlex && bally >= paddley && bally <= (paddley + 8))
+	{
+		ball->set_speed(ball, dir, ball->diry);
+	}
+}
+
+int gameover(POBJECT b)
+{
+	if (b->posx >= 127)
+	{
+		char *s;
+		char test1[] = "Game Over! ";
+
+		init_app();
+		ascii_init();
+		ascii_gotoxy(1, 1);
+		s = test1;
+		while (*s)
+		{
+			ascii_write_char(*s++);
+		}
+		return 1;
+	}
+	return 0;
 }
 
 // ------------------------------------------------------- Interrupt ------------------------------------------------------------------------------- //

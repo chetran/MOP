@@ -5,7 +5,6 @@
 #include <stdlib.h>
 
 // In startup.c are functions defined that is built in for processor MD407.
-
 // From delay.c
 //#define SIMULATOR // Need to comment to deativate 
 #define STK_CTRL (volatile unsigned int *) 0xE000E010 
@@ -15,6 +14,7 @@
 #define GPIO_ODR_HIGH ((volatile unsigned char *)   (GPIO_D+0x15))
 #define GPIO_ODR_LOW ((volatile unsigned char *)   (GPIO_D+0x14))
 #define GPIO_IDR_HIGH ((volatile unsigned char *)   (GPIO_D+0x11))
+#define MAX_POINTS 30
 // For asciidisplay.c
 #define PORT_BASE 0x40021000 // Port E 
 #define portModer ((volatile unsigned int *)  PORT_BASE)
@@ -30,31 +30,7 @@
 #define B_RW 2
 #define B_RS 1
 
-void init_app(void);
-void delay_250ns(void);
-void delay_micro(unsigned int ms);
-void delay_milli(unsigned int ms);
-void ascii_ctrl_bit_set(char x);
-void ascii_ctrl_bit_clear(char x);
-void init_app(void);
-void ascii_write_cmd(unsigned char command);
-void ascii_write_data(unsigned char data);
-unsigned char ascii_read_status(void);
-unsigned char ascii_read_data(void);
-void ascii_write_controller(unsigned char byte);
-unsigned char ascii_read_controller(void);
-void ascii_command(unsigned char command);
-void ascii_init(void);
-void ascii_write_char(unsigned char c);
-void ascii_gotoxy(int x, int y);
-
-unsigned char keyb(void);
-int ReadColumn( void );
-void ActivateRow( unsigned int row );
-
-#define MAX_POINTS 30
-
-// LCD MODULE
+// All structs 
 typedef struct 
 {
 	unsigned char x,y;
@@ -96,6 +72,30 @@ typedef struct tObj
 	void (* set_speed) (struct tObj *, int, int);
 } OBJECT, *POBJECT;
 
+void init_app(void);
+void delay_250ns(void);
+void delay_micro(unsigned int ms);
+void delay_milli(unsigned int ms);
+void ascii_ctrl_bit_set(char x);
+void ascii_ctrl_bit_clear(char x);
+void init_app(void);
+void ascii_write_cmd(unsigned char command);
+void ascii_write_data(unsigned char data);
+unsigned char ascii_read_status(void);
+unsigned char ascii_read_data(void);
+void ascii_write_controller(unsigned char byte);
+unsigned char ascii_read_controller(void);
+void ascii_command(unsigned char command);
+void ascii_init(void);
+void ascii_write_char(unsigned char c);
+void ascii_gotoxy(int x, int y);
+
+// Keypad
+unsigned char keyb(void);
+int ReadColumn( void );
+void ActivateRow( unsigned int row );
+
+// Object functions
 int draw_line(PLINE l);
 void swap(unsigned char *a, unsigned char *b);
 void draw_rectangle(PRECT r);

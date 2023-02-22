@@ -107,6 +107,7 @@ void set_ballobject_speed(POBJECT o, int speedx, int speedy);
 void move_paddle(POBJECT p);
 void bounce(POBJECT paddle, POBJECT ball);
 int gameover(POBJECT b);
+void resetgame(POBJECT paddle, POBJECT ball);
 
 // Lab 4
 void my_irq_handler(void);
@@ -174,6 +175,7 @@ void main(void)
 		{
 			case 9: r->set_speed(r, 0, 5); break;
 			case 3: r->set_speed(r, 0, -5); break;
+			case 6: resetgame(r, p); break;
 			default: r->set_speed(r, 0, 0); break;
 		}
 	}
@@ -593,6 +595,17 @@ int gameover(POBJECT b)
 		return 1;
 	}
 	return 0;
+}
+
+void resetgame(POBJECT paddle, POBJECT ball)
+{
+	graphic_clear_screen();
+	ball->posx = 1;
+	ball->posy = 1;
+	paddle->posx = 115;
+	paddle->posy = 25;
+	paddle->draw(paddle);
+	ball->draw(ball);
 }
 
 // ------------------------------------------------------- Interrupt ------------------------------------------------------------------------------- //

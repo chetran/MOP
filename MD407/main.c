@@ -107,11 +107,7 @@ void set_ballobject_speed(POBJECT o, int speedx, int speedy);
 void move_paddle(POBJECT p);
 void bounce(POBJECT paddle, POBJECT ball);
 int gameover(POBJECT b);
-int pixel_overlap(POBJECT o1, POBJECT o2);
-int objects_overlap(POBJECT o1, POBJECT o2);
-void move_spider(POBJECT s);
-void printGameOver(int result);
-
+void resetgame(POBJECT paddle, POBJECT ball);
 
 // Lab 4
 void my_irq_handler(void);
@@ -129,7 +125,7 @@ GEOMETRY ball_geometry =
 static OBJECT ballobject =
 {
 	&ball_geometry,
-	0,0,
+	7,1,
 	1,1,
 	draw_ballobject,
 	clear_ballobject,
@@ -158,55 +154,31 @@ static OBJECT paddle_object =
 	set_ballobject_speed,
 };
 
-GEOMETRY spider_geo = {
-	22,
-	8,6,
-	{
-		{2,0},{3,0},{1,1},{4,1},{0,2},{1,2},{2,2},{3,2},{4,2},{5,2},{0,3},{2,3},{3,3},{5,3},{1,4},{4,4},{2,5},{3,5},{1,6},{4,6},{0,7},{5,7}
-	}
-};
-
-OBJECT spider_obj = {
-	&spider_geo,
-	0,0,
-	70,25,
-	draw_ballobject,
-	clear_ballobject,
-	move_spider,
-	set_ballobject_speed
-};
-
-int main(void)
+void main(void)
 {
 	char c;
-	POBJECT victim = &ballobject;
-	POBJECT creature = &spider_obj;
+	POBJECT p = &ballobject;
+	POBJECT r = &paddle_object;
 	init_app();
 	graphic_initalize();
 	graphic_clear_screen();
-	victim->set_speed(victim, 4, 1);
-
 	while(1)
 	{
-		victim->move(victim);
-		creature->move(creature);
+		r->move(r);
+		bounce(r, p);
+		p->move(p);
+		if (gameover(p))
+			break;
+		delay_micro(100);
 		c = keyb();
 		switch(c)
 		{
-			case 6: creature->set_speed(creature, 2, 0); break;
-			case 4: creature->set_speed(creature, -2, 0); break;
-			case 5: creature->set_speed(creature, 0, 0); break;
-			case 2: creature->set_speed(creature, 0, -2); break;
-			case 8: creature->set_speed(creature, 0, 2); break;
-			default: creature->set_speed(creature, 0, 0); break;
+			case 9: r->set_speed(r, 0, 5); break;
+			case 3: r->set_speed(r, 0, -5); break;
+			case 6: resetgame(r, p); break;
+			default: r->set_speed(r, 0, 0); break;
 		}
-		if (objects_overlap(victim, creature))
-		{
-			break;
-		}
-		delay_micro(20);
 	}
-	return 0;
 }
 
 void init_app(void)
@@ -605,79 +577,35 @@ void bounce(POBJECT paddle, POBJECT ball)
 	}
 }
 
-void printGameOver(int result)
-{
-	char *s;
-	char test1[] = "Game Over! ";
-	char test2[] = "You Won!";
-
-	init_app();
-	ascii_init();
-	ascii_gotoxy(1, 1);
-	s = test1;
-	if (result)
-		s = test2;
-	while (*s)
-	{
-		ascii_write_char(*s++);
-	}
-}
-
 int gameover(POBJECT b)
 {
 	if (b->posx >= 127)
 	{
+		char *s;
+		char test1[] = "Game Over! ";
+
+		init_app();
+		ascii_init();
+		ascii_gotoxy(1, 1);
+		s = test1;
+		while (*s)
+		{
+			ascii_write_char(*s++);
+		}
 		return 1;
 	}
 	return 0;
 }
 
-void move_spider(POBJECT s)
+void resetgame(POBJECT paddle, POBJECT ball)
 {
-	clear_ballobject(s);
-	int newx = s->dirx + s->posx;
-	int newy = s->diry + s->posy;
-	//if (newx < 1 || newx > 128 || newy < 1 || newy > 64)
-		//exit(1);
-	s->posx = newx;
-	s->posy = newy;
-	draw_ballobject(s);	
-}
-
- int pixel_overlap(POBJECT o1, POBJECT o2)
- {
-	int x1 = o1->posx + o1->geo->sizex;
-	int y1 = o1->posy + o1->geo->sizey;
-	int x2 = o2->posx + o2->geo->sizex;
-	int y2 = o2->posy + o2->geo->sizey;
-	if (((o1->posx >= o2->posx && o1->posx <= x2) && (o1->posy >= o2->posy && o1->posy <= y2)) || ((o2->posx >= o1->posx && o2->posx <= x1) && (o2->posy >= o1->posy && o2->posy <= y1)))
-		return 1;
-	return 0;
-
- }
-
-int objects_overlap(POBJECT o1, POBJECT o2)
-{
-	if (o2->posx < 1 || o2->posx > 128 || o2->posy < 1 || o2->posy > 64)
-		{
-			printGameOver(0);
-			return 1;
-		}
-	int offset1x = o1->posx;
-	int offset1y = o1->posy;
-	int offset2x = o2->posx;
-	int offset2y = o2->posy;
-	if (pixel_overlap(o1, o2))
-	for (int i = 0; i < o1->geo->numpoints; i++) {
-		for (int j = 0; j < o2-> geo->numpoints; j++)
-		if ((offset1x + o1->geo->px[i].x == offset2x + o2->geo->px[j].x) &&
-			(offset1y + o1->geo->px[i].y == offset2y + o2->geo->px[j].y)) 
-		{
-			printGameOver(1);
-			return 1;
-		}
-	}
-	return 0;
+	graphic_clear_screen();
+	ball->posx = 1;
+	ball->posy = 1;
+	paddle->posx = 115;
+	paddle->posy = 25;
+	paddle->draw(paddle);
+	ball->draw(ball);
 }
 
 // ------------------------------------------------------- Interrupt ------------------------------------------------------------------------------- //

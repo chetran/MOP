@@ -6,9 +6,8 @@
 
 /*
 The program works by setting the amount of micro seconds delay. 
-For everytime the processor counts to one micro second an interrupt happoend and a handler will be called.
-This goes on for all the micro seconds set. 
-Deping on the if this is run on the hardware or simulation you may need to define "SIMULATION"
+For everytime the processor counts down to one micro second an interrupt happens and the handler will be called.
+You may need to define "SIMULATION"
 */
 
 // In startup.c are functions defined that is built in for processor MD407.

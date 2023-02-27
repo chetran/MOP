@@ -448,7 +448,7 @@ int draw_line(PLINE l)
 		return 0;
 	
 	// Bresenhams Algorithm - honestly no idea how it works 
-	char steep;
+	int steep;
 	if (abs(l->p0.y - l->p1.y) > abs(l->p0.x - l->p1.x))
 		steep = 1;
 	else
@@ -463,11 +463,11 @@ int draw_line(PLINE l)
 		swap(&l->p0.x, &l->p1.x);
 		swap(&l->p0.y, &l->p1.y);
 	}
-	char deltax = l->p1.x - l->p0.x;
-	char deltay = abs(l->p1.y - l->p0.y);
-	char error = 0;
-	char y = l->p0.y;
-	char ystep;
+	int deltax = l->p1.x - l->p0.x;
+	int deltay = abs(l->p1.y - l->p0.y);
+	int error = 0;
+	int y = l->p0.y;
+	int ystep;
 	if (l->p0.y < l->p1.y)
 		ystep = 1;
 	else

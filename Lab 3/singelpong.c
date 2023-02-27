@@ -167,8 +167,6 @@ void main(void)
 		r->move(r);
 		bounce(r, p);
 		p->move(p);
-		if (gameover(p))
-			break;
 		delay_micro(100);
 		c = keyb();
 		switch(c)
@@ -528,12 +526,12 @@ void move_ballobject(POBJECT o)
 		o->dirx = abs(o->dirx);
 		newx = o->dirx + o->posx;
 	}	
-	if (newx > 128) // touches right side
-	{
-		// if it touches right side x dir is positive and we need to set it negative. 
-		o->dirx = -(o->dirx);
-		newx = o->dirx + o->posx;
-	}
+	//if (newx > 128) // touches right side
+	//{
+	//	// if it touches right side x dir is positive and we need to set it negative. 
+	//	o->dirx = -(o->dirx);
+	//	newx = o->dirx + o->posx;
+	//}
 	if (newy < 1) // touches top side
 	{
 		o->diry = abs(o->diry);

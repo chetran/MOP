@@ -20,6 +20,19 @@
 */
 
 // In startup.c are functions defined that is built in for processor MD407.
+// Timer 6
+#define TIM6_CR1 ((volatile unsigned short *) 0x40001000)
+#define TIM6_CNT ((volatile unsigned short *) 0x40001024)
+#define TIM6_ARR ((volatile unsigned short *) 0x4000102C)
+#define TIM6_SR ((volatile unsigned short *) 0x40001010)
+#define TIM6_PSC ((volatile unsigned short *) 0x40001028)
+#define TIM6_DIER ((volatile unsigned short *) 0x4000100C)
+#define UDIS (1<<1)
+#define CEN (1<<0)
+#define UIF (1<<0)
+#define UIE (1<<0)
+#define OPM (1<<3)
+
 #define PORT_D 0x40020C00
 #define PORT_E 0x40021000
 #define D_MODER ((volatile unsigned int *) PORT_D)
@@ -28,37 +41,24 @@
 #define E_ODR_LOW ((volatile unsigned char *) (PORT_E+0x14))
 #define E_IDR_LOW ((volatile unsigned char *) (PORT_E+0x10))
 
+#define NVIC_TIM6_ISER1 ((volatile unsigned int *) 0xE000E100)  
 #define NVIC_TIM6_ISER2 ((volatile unsigned int *) 0xE000E104) // second register of NIVC module 
 #define NVIC_TIM6_IRQ_BPOS (1<<22) // bit set to activate the timer. 
 #define TIM6_IRQVEC ((void (**)(void)) 0x2001C118)
 
-// IRF_VECTOR 
-#define SYSCFG_BASE ((volatile unsigned int *) 0x40013800)
-#define SYSCFG_EXTICR1 ((volatile unsigned int *) 0x40013808)
-#define EXTI_IMR ((unsigned int *) 0x40013C00)
-#define EXTI_RTSR ((unsigned int *) 0x40013C08)
-#define EXTI_FTSR ((unsigned int *) 0x40013C0C)
-#define EXTI_PR ((volatile unsigned int *) 0x40013C14)
 #define EXTI3_IRQVEC ((void (**)(void)) 0x2001C064)
-#define EXTI2_IRQVEC ((void (**)(void)) 0x2001C060)
-#define EXTI1_IRQVEC ((void (**)(void)) 0x2001C05C)
-#define EXTI0_IRQVEC ((void (**)(void)) 0x2001C058)
-#define NVIC_ISER0 ((volatile unsigned int *) 0xE000E100)  
-#define NVIC_EXTI3_IRQ_BPOS (1<<9)
-#define NVIC_EXTI2_IRQ_BPOS (1<<8)
-#define NVIC_EXTI1_IRQ_BPOS (1<<7)
-#define NVIC_EXTI0_IRQ_BPOS (1<<6)
-#define EXTI3_IRQ_BPOS (1<<3)
-#define EXTI2_IRQ_BPOS (1<<2)
-#define EXTI1_IRQ_BPOS (1<<1)
-#define EXTI0_IRQ_BPOS (1<<0)
+#define SYSCFG_EXTICR1 0x40013808
+#define EXTI_SWIER ((volatile unsigned int *) 0x40013C10)
+#define EXTI_PR ((volatile unsigned int *) 0x40013C14)
+
 
 // Functions
 void init_app(void);
+void timer6_interrupt_handler(void);
+void delay(unsigned int count);
+void timer6_init(void);
+void timer6_interrupt(void);
 void exti3_handler(void);
-void exit2_handler(void);
-void exit1_handler(void);
-void exit0_handler(void);
 
 // Variables 
 static volatile int flag;
@@ -88,45 +88,81 @@ void init_app(void)
 	// Initialize port D for display usage
 	*D_MODER = 0x55555555;	
 
-	// Connect PE3 to EXTI 0 to 3
-	*((unsigned int *) SYSCFG_EXTICR1) = 0x0444;
+	// Connect PE3 to EXTI3
+	*((unsigned int *) SYSCFG_EXTICR1) &= ~0xF000;
+	*((unsigned int *) SYSCFG_EXTICR1) |= 0x4000; // Configures PE3 to EXTI3
 
-	*EXTI_IMR |= EXTI2_IRQ_BPOS | EXTI1_IRQ_BPOS | EXTI0_IRQ_BPOS; // Activates EXTIS
-	*EXTI_RTSR |= EXTI2_IRQ_BPOS | EXTI1_IRQ_BPOS | EXTI0_IRQ_BPOS;; // Activates for rising flag
-	*EXTI_FTSR &= ~EXTI2_IRQ_BPOS | ~EXTI1_IRQ_BPOS | ~EXTI0_IRQ_BPOS;; // Masks negative flag
+	*((unsigned int *) 0x40013C00) |= 8; // Activates EXTI3
+	*((unsigned int *) 0x40013C08) |= 8; // Activates for rising flag
+	*((unsigned int *) 0x40013C0C) &= ~8; // Masks negative flag
 
-	*EXTI2_IRQVEC = exit2_handler; // sets up the interrupt handler
-	*EXTI1_IRQVEC = exit1_handler; // sets up the interrupt handler
-	*EXTI0_IRQVEC = exit0_handler; // sets up the interrupt handler
+	*EXTI3_IRQVEC = exti3_handler; // sets up the interrupt handler
 
-	*NVIC_ISER0 |= NVIC_EXTI2_IRQ_BPOS | NVIC_EXTI1_IRQ_BPOS | NVIC_EXTI0_IRQ_BPOS;
+	*NVIC_TIM6_ISER1 |= (1<<9);
 	
 }
 
-void exit2_handler(void)
+void timer6_init(void)
 {
-	int lampa = 100;
-	
+	ticks = 0;
+	seconds = 0;
+	*TIM6_CR1 &= ~CEN;
+	*TIM6_IRQVEC = timer6_interrupt;
+	*NVIC_TIM6_ISER2 |= NVIC_TIM6_IRQ_BPOS;
+
+	// Sets time base to 0.1 s 
+	*TIM6_PSC = 839;
+	*TIM6_ARR = 9999;
+	*TIM6_DIER |= UIE;
+	*TIM6_CR1 |= CEN;
+}
+
+void timer6_interrupt_handler(void)
+{
+	*TIM6_SR &= ~UIF; //
+	delay_count--;
+	if (delay_count > 0)
+		return;
+	*TIM6_CR1 &= ~CEN; // Deactivates TIM&
+	flag = 1;
+}
+
+void delay(unsigned int count)
+{
+	if (count == 0)
+		return;
+	delay_count = count;
+	flag = 0;
+	*TIM6_CR1 &= ~CEN;
+
+	// Sets the interrrupt handler 
+	*TIM6_IRQVEC = timer6_interrupt_handler;
+
+	// Makes it possible for interrupts
+	*NVIC_TIM6_ISER2 |= NVIC_TIM6_IRQ_BPOS;
+
+	// Sets time base to 1 ms
+	*TIM6_PSC = 83;
+	*TIM6_ARR = 999;
+
+	// Enables interrupts
+	*TIM6_DIER |= UIE;
+
+	// Activates the timer 
+	*TIM6_CR1 |= CEN; // in the book it wants it be ( CEN | OPM), but then it will only count down once. 
 
 }
-void exit1_handler(void)
+
+void timer6_interrupt(void)
 {
-	if (*EXTI_PR & EXTI1_IRQ_BPOS)
+	*TIM6_SR &= ~UIF;
+	ticks++;
+	if (ticks > 2)
 	{
-		count = 0;
-		*EXTI_PR |= EXTI1_IRQ_BPOS;
-	}
-
-}
-void exit0_handler(void)
-{
-	if (*EXTI_PR & EXTI0_IRQ_BPOS)
-	{
-		*EXTI_PR |= EXTI0_IRQ_BPOS;
-		count++;
+		ticks = 0;
+		seconds++;
 	}
 }
-
 
 void exti3_handler(void)
 {

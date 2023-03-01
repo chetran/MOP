@@ -54,17 +54,9 @@
 
 // Functions
 void init_app(void);
-void timer6_interrupt_handler(void);
-void delay(unsigned int count);
-void timer6_init(void);
-void timer6_interrupt(void);
 void exti3_handler(void);
 
 // Variables 
-static volatile int flag;
-static volatile int delay_count;
-volatile int ticks;
-volatile int seconds;
 volatile int count = 0;
 
 void main(void)
@@ -102,68 +94,6 @@ void init_app(void)
 	
 }
 
-void timer6_init(void)
-{
-	ticks = 0;
-	seconds = 0;
-	*TIM6_CR1 &= ~CEN;
-	*TIM6_IRQVEC = timer6_interrupt;
-	*NVIC_TIM6_ISER2 |= NVIC_TIM6_IRQ_BPOS;
-
-	// Sets time base to 0.1 s 
-	*TIM6_PSC = 839;
-	*TIM6_ARR = 9999;
-	*TIM6_DIER |= UIE;
-	*TIM6_CR1 |= CEN;
-}
-
-void timer6_interrupt_handler(void)
-{
-	*TIM6_SR &= ~UIF; //
-	delay_count--;
-	if (delay_count > 0)
-		return;
-	*TIM6_CR1 &= ~CEN; // Deactivates TIM&
-	flag = 1;
-}
-
-void delay(unsigned int count)
-{
-	if (count == 0)
-		return;
-	delay_count = count;
-	flag = 0;
-	*TIM6_CR1 &= ~CEN;
-
-	// Sets the interrrupt handler 
-	*TIM6_IRQVEC = timer6_interrupt_handler;
-
-	// Makes it possible for interrupts
-	*NVIC_TIM6_ISER2 |= NVIC_TIM6_IRQ_BPOS;
-
-	// Sets time base to 1 ms
-	*TIM6_PSC = 83;
-	*TIM6_ARR = 999;
-
-	// Enables interrupts
-	*TIM6_DIER |= UIE;
-
-	// Activates the timer 
-	*TIM6_CR1 |= CEN; // in the book it wants it be ( CEN | OPM), but then it will only count down once. 
-
-}
-
-void timer6_interrupt(void)
-{
-	*TIM6_SR &= ~UIF;
-	ticks++;
-	if (ticks > 2)
-	{
-		ticks = 0;
-		seconds++;
-	}
-}
-
 void exti3_handler(void)
 {
 	if (*EXTI_PR & 8)
@@ -182,10 +112,10 @@ void exti3_handler(void)
 		if (*E_IDR_LOW & 4)
 		{
 			*E_ODR_LOW |= (1<<6);
-			if (E_IDR_LOW)
-				*E_ODR_LOW = 0xFF;
+			if (*ODR_LOW)
+				count = 0;
 			else
-				*E_ODR_LOW = 0xFF;
+				count = 0xFF;
 		}
 		
 	}

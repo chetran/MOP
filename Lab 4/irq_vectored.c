@@ -28,10 +28,6 @@
 #define E_ODR_LOW ((volatile unsigned char *) (PORT_E+0x14))
 #define E_IDR_LOW ((volatile unsigned char *) (PORT_E+0x10))
 
-#define NVIC_TIM6_ISER2 ((volatile unsigned int *) 0xE000E104) // second register of NIVC module 
-#define NVIC_TIM6_IRQ_BPOS (1<<22) // bit set to activate the timer. 
-#define TIM6_IRQVEC ((void (**)(void)) 0x2001C118)
-
 // IRF_VECTOR 
 #define SYSCFG_BASE ((volatile unsigned int *) 0x40013800)
 #define SYSCFG_EXTICR1 ((volatile unsigned int *) 0x40013808)
@@ -55,16 +51,11 @@
 
 // Functions
 void init_app(void);
-void exti3_handler(void);
 void exit2_handler(void);
 void exit1_handler(void);
 void exit0_handler(void);
 
 // Variables 
-static volatile int flag;
-static volatile int delay_count;
-volatile int ticks;
-volatile int seconds;
 volatile int count = 0;
 
 void main(void)
@@ -96,8 +87,8 @@ void init_app(void)
 	*EXTI_FTSR &= ~EXTI2_IRQ_BPOS | ~EXTI1_IRQ_BPOS | ~EXTI0_IRQ_BPOS;; // Masks negative flag
 
 	*EXTI2_IRQVEC = exit2_handler; // sets up the interrupt handler
-	*EXTI1_IRQVEC = exit1_handler; // sets up the interrupt handler
-	*EXTI0_IRQVEC = exit0_handler; // sets up the interrupt handler
+	*EXTI1_IRQVEC = exit1_handler; 
+	*EXTI0_IRQVEC = exit0_handler; 
 
 	*NVIC_ISER0 |= NVIC_EXTI2_IRQ_BPOS | NVIC_EXTI1_IRQ_BPOS | NVIC_EXTI0_IRQ_BPOS;
 	
@@ -105,9 +96,14 @@ void init_app(void)
 
 void exit2_handler(void)
 {
-	int lampa = 100;
-	
-
+	if (*EXTI_PR & EXTI2_IRQ_BPOS)
+	{
+		*EXTI_PR |= EXTI2_IRQ_BPOS;
+		if (*ODR_LOW)
+			count = 0;
+		else
+			count = 0xFF;
+	}
 }
 void exit1_handler(void)
 {
@@ -127,30 +123,3 @@ void exit0_handler(void)
 	}
 }
 
-
-void exti3_handler(void)
-{
-	if (*EXTI_PR & 8)
-	{
-		*EXTI_PR |= 8;
-		if (*E_IDR_LOW & 1)
-		{
-			*E_ODR_LOW |= (1<<4);
-			count++;
-		}
-		if (*E_IDR_LOW & 2)
-		{
-			*E_ODR_LOW |= (1<<5);
-			count = 0;
-		}
-		if (*E_IDR_LOW & 4)
-		{
-			*E_ODR_LOW |= (1<<6);
-			if (E_IDR_LOW)
-				*E_ODR_LOW = 0xFF;
-			else
-				*E_ODR_LOW = 0xFF;
-		}
-		
-	}
-}

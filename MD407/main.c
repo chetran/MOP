@@ -41,7 +41,7 @@
 // ------------------------------------------------------- STRUCTS ------------------------------------------------------------------------------- //
 typedef struct 
 {
-	unsigned char x,y;
+	int x,y;
 } POINT, *PPOINT;
 
 typedef struct
@@ -56,10 +56,6 @@ typedef struct tObj
 {
 	PGEOMETRY geo;
 	int posx, posy;
-	void (* draw) (struct tObj *);
-	void (* clear) (struct tObj *);
-	void (* move) (struct tObj *);
-	void (* set_speed) (struct tObj *, int, int);
 } OBJECT, *POBJECT;
 
 typedef struct {
@@ -77,6 +73,9 @@ typedef struct {
     dir_t dir;
 } snake_t;
 
+POINT snake_design[] = {{2,2},{1,2},{0,2},{-1,2},{-2,2},{-2,1},{-2,0},{-2,-1},{-2,-2},{-1,-2},{0,-2},{1,-2},{2,-2},{2,-1},{2,0},{2,1}};
+POINT apple_design[] = {{4,1},{0,3},{-1,2},{0,2},{1,2},{-2,1},{2,1},{-2,0},{2,0},{-1,-1},{0,-1},{1,-1},};
+
 // ------------------------------------------------------- FUNCTIONS ------------------------------------------------------------------------------- //
 
 void init_app(void)
@@ -89,7 +88,14 @@ void init_app(void)
 	* ((unsigned long *)0xE000ED08) = 0x2001C000;
 
 	// Initialize port D for display usage
-	*GPIO_MODER = 0x55555555;	
+	*GPIO_MODER = 0x55555555;
+
+	*((volatile unsigned int *)0x40020C08) = 0x55555555; // MEDIUM SPEED
+    * ( (volatile unsigned int *) 0x40020C00) &= 0x00000000; // MODER CONFIG
+    * ( (volatile unsigned int *) 0x40020C00) |= 0x55005555; // MODER CONFIG
+    * ( (volatile unsigned short *) 0x40020C04) &= 0x0000; // TYPER CONFIG
+    * ( (volatile unsigned int *) 0x40020C0C) &= 0x00000000; // PUPDR CONFIG
+    * ( (volatile unsigned int *) 0x40020C0C) |= 0x0000AAAA; // PUPDR CONFIG	
 
 }
 
@@ -200,6 +206,21 @@ unsigned char keyb(void)
 }
 
 // ------------------------------------------------------- SNAKE FUNCTIONS ------------------------------------------------------------------------------- //
+void draw_clear_snake(snake_t *snake, int clear)
+{
+	
+	for (int i = 0; i < snake->length; i++)
+	{
+		for (int j = 0; j < 16; j++)
+		{
+			if (clear)
+				graphic_pixel_clear(snake->body_part[i].posx + snake_design[j].x, snake->body_part[i].posy + snake_design[j].y);
+			else
+				graphic_pixel_set(snake->body_part[i].posx + snake_design[j].x, snake->body_part[i].posy + snake_design[j].y);
+		}	
+	}
+}
+
 
 void apple_new(apple_t *apple, snake_t *snake) {
     // Draw random positions until position not hitting snake found
@@ -220,7 +241,10 @@ void apple_new(apple_t *apple, snake_t *snake) {
     apple->y = y_try;
 }
 
-void snake_turn(snake_t *snake) {
+void snake_turn(snake_t *snake) 
+{
+	draw_clear_snake(snake, 1);
+
 	char input = keyb(); // fetch the key value to input
 	switch (input)
 	{
@@ -253,16 +277,16 @@ void snake_move(snake_t *snake)
     switch (snake->dir)
         {
         case UP:
-            snake->body_part[0].posy--;
+            snake->body_part[0].posy -= 5;
             break;
         case DOWN:
-            snake->body_part[0].posy++;
+            snake->body_part[0].posy += 5;
             break;
         case LEFT:
-            snake->body_part[0].posx--;
+            snake->body_part[0].posx -= 5;
             break;
         default:
-            snake->body_part[0].posx++;
+            snake->body_part[0].posx += 5;
             break;
         }
     
@@ -333,24 +357,62 @@ bool snake_hit_wall(snake_t *snake)
     return false;
 }
 
+
+
+
+
+void init_snake(snake_t *snake)
+{
+	snake->length = 2;
+	snake->body_part[0].posx = 70;
+	snake->body_part[0].posy = 20;
+	snake->body_part[1].posx = 65;
+	snake->body_part[1].posy = 20;
+	snake->dir = RIGHT;
+}
+
+void draw_apple(apple_t *apple)
+{
+	for (int i = 0; i < 12; i++)
+	{
+		graphic_pixel_set(apple->x + apple_design[i].x, apple->y+ apple_design[i].y);
+	}
+}
+
+void draw_game(snake_t *snake, apple_t *apple)
+{
+	draw_clear_snake(snake, 0);
+	draw_apple(apple);
+}
+
+
+
 // ------------------------------------------------------- GAME ------------------------------------------------------------------------------- //
 
 void main(void) 
 {
 	bool snake_dead = false;
 	snake_t snake;
+
+	graphic_initalize();
+	graphic_clear_screen();
 	init_app();
 
+	init_snake(&snake);
 	apple_t apple;
     apple_new(&apple, &snake);
-
+	draw_game(&snake, &apple);
+	
 	while (!snake_dead) 
 	{
+		
         snake_turn(&snake);
         snake_move(&snake);
+		draw_game(&snake, &apple);
 		// need some kinda of draw function 
     
-        if (snake_eat_apple(&apple, &snake)) 
+		/*
+		 if (snake_eat_apple(&apple, &snake)) 
 		{
 
         }
@@ -360,9 +422,10 @@ void main(void)
             
         }
         
+		*/
+		delay_micro(150);
+       
     }
 	
-	
-
 
 }

@@ -13,7 +13,7 @@
 #define GPIO_ODR_HIGH ((volatile unsigned char *)   (GPIO_D+0x15))
 #define GPIO_ODR_LOW ((volatile unsigned char *)   (GPIO_D+0x14))
 #define GPIO_IDR_HIGH ((volatile unsigned char *)   (GPIO_D+0x11))
-// For asciidisplay.c
+// For asciidisplay
 #define PORT_BASE 0x40021000 // Port E 
 #define portModer ((volatile unsigned int *)  PORT_BASE)
 #define portOtyper ((volatile unsigned short *) (PORT_BASE+0x4))
@@ -28,17 +28,7 @@
 #define B_RW 2
 #define B_RS 1
 
-void ascii_write_cmd(unsigned char command);
-void ascii_write_data(unsigned char data);
-unsigned char ascii_read_status(void);
-unsigned char ascii_read_data(void);
-void ascii_write_controller(unsigned char byte);
-unsigned char ascii_read_controller(void);
-void ascii_command(unsigned char command);
-void ascii_init(void);
-void ascii_write_char(unsigned char c);
-void ascii_gotoxy(int x, int y);
-
+// For random num
 #define TIM6_CR1 ((volatile unsigned short *) 0x40001000)
 #define TIM6_CNT ((volatile unsigned short *) 0x40001024)
 #define TIM6_ARR ((volatile unsigned short *) 0x4000102C)
@@ -55,17 +45,8 @@ typedef struct
 	int x,y;
 } POINT, *PPOINT;
 
-typedef struct
-{
-	int numpoints;
-	int sizex;
-	int sizey;
-	POINT px[MAX_POINTS];
-} GEOMETRY, *PGEOMETRY;
-
 typedef struct tObj
 {
-	PGEOMETRY geo;
 	int posx, posy;
 } OBJECT, *POBJECT;
 
@@ -84,13 +65,30 @@ typedef struct {
     dir_t dir;
 } snake_t;
 
-POINT snake_design[] = {{2,2},{1,2},{0,2},{-1,2},{-2,2},{-2,1},{-2,0},{-2,-1},{-2,-2},{-1,-2},{0,-2},{1,-2},{2,-2},{2,-1},{2,0},{2,1}};
-POINT apple_design[] = {{0,1},{1,1},{1,0},{0,0},{2,0},{-1,0},{1,-1},{0,-1},{1,-1},{2,-1},{0,-2},{1,-2}};
-
 // ------------------------------------------------------- VARIABLES ------------------------------------------------------------------------------- //
-volatile int count_eaten_apples = 0;
-char firstD = '0';
+int count_eaten_apples;
+char firstD;
 char lastD;
+POINT snake_design[] = {{2,2},{1,2},{0,2},{-1,2},{-2,2},{-2,1},{-2,0},{-2,-1},{-2,-2},{-1,-2},{0,-2},{1,-2},{2,-2},{2,-1},{2,0},{2,1}};
+POINT apple_design[] = {{-1,2},{0,2},{1,2},{-2,1},{-1,1},{0,1},{1,1},{2,1},{-2,0},{-1,0},{0,0},{1,0},{2,0},{-2,-1},{-1,-1},{0,-1},{1,-1},{2,-1},{-1,-2},{0,-2},{1,-2}};
+POINT s_start[] = {
+                                        {27,26},{28,26},{29,26},{30,26},
+                        {25,27},{26,27},{27,27},{28,27},{29,27},{30,27},{31,27},{32,27},
+        {23,28},{24,28},{25,28},{26,28},                                {31,28},{32,28},{33,28},{34,28},
+        {23,29},{24,29},{25,29},                                                  {32,29},{33,29},{34,29},
+{22,30},{23,30},{24,30},{25,30},
+        {23,31},{24,31},{25,31},
+        {23,32},{24,32},{25,32},{26,32},
+                {24,33},{25,33},{26,33},{27,34},{28,34},{29,34},{30,34},{31,34},{32,34},{33,34},
+                                                                        {31,35},{32,35},{33,35},{34,35},
+                                                                                {32,35},{33,35},{34,35},
+                                                                                {32,36},{33,36},{34,36},{35,36},
+        {23,37},{24,37},{25,37},                                                        {32,37},{33,37},{34,37},
+        {23,38},{24,38},{25,38},{26,38},                                {31,38},{32,38},{33,38},{34,38},
+                        {25,39},{26,39},{27,39},{28,39},{29,39},{30,39},{31,39},{32,39},
+                                        {27,40},{28,40},{29,40},{30,40}
+                    };
+
 // ------------------------------------------------------- FUNCTIONS ------------------------------------------------------------------------------- //
 void timer6_init(void)
 {
@@ -98,7 +96,6 @@ void timer6_init(void)
 	*TIM6_ARR = 0xFFFF; // If its set to a low number, the random number will always be the upper bound because it counts to fast.
 	*TIM6_CR1 |= ( CEN | UDIS); // Activates the counter module and disables "update event"
 }
-
 
 void init_app(void)
 {
@@ -349,7 +346,7 @@ void draw_clear_snake(snake_t *snake, int clear)
 
 void draw_clear_apple(apple_t *apple, int clear)
 {
-	for (int i = 0; i < 12; i++)
+	for (int i = 0; i < 21; i++)
 	{
 		if (clear)
 			graphic_pixel_clear(apple->x + apple_design[i].x, apple->y+ apple_design[i].y);
@@ -383,22 +380,21 @@ void snake_turn(snake_t *snake)
 	draw_clear_snake(snake, 1);
 
 	char input = keyb(); // fetch the key value to input
-	switch (input)
+	if (input == 2 && snake->dir != DOWN)
 	{
-	case 2:
 		snake->dir = UP;
-		break;
-	case 4:
+	}
+	else if (input == 4 && snake->dir != RIGHT)
+	{
 		snake->dir = LEFT;
-		break;
-	case 8:
+	}
+	else if (input == 8 && snake->dir != UP)
+	{
 		snake->dir = DOWN;
-		break;
-	case 6:
+	}
+	else if (input == 6 && snake->dir != LEFT)
+	{
 		snake->dir = RIGHT;
-		break;
-	default:
-		break;
 	}
 
 }
@@ -430,7 +426,7 @@ void snake_move(snake_t *snake)
 }
 
 bool snake_eat_apple(apple_t *apple, snake_t *snake) {
-    if ((apple->x >= snake->body_part[0].posx - 3  && apple->x <= snake->body_part[0].posx + 2) && (apple->y >= snake->body_part[0].posy - 3 && apple->y <= snake->body_part[0].posy + 2))
+    if ((apple->x >= snake->body_part[0].posx - 3  && apple->x <= snake->body_part[0].posx + 3) && (apple->y >= snake->body_part[0].posy - 3 && apple->y <= snake->body_part[0].posy + 3))
     {
         // Can't increase the length of the snake.
 		draw_clear_apple(apple, 1);
@@ -466,10 +462,6 @@ bool snake_hit_wall(snake_t *snake)
 		return true;
     return false;
 }
-
-
-
-
 
 void init_snake(snake_t *snake)
 {
@@ -515,17 +507,26 @@ void print_text(char text[])
 	ascii_gotoxy(1, 2);
 }
 
-
-// ------------------------------------------------------- GAME ------------------------------------------------------------------------------- //
-
-void main(void) 
+void write_logo(void)
 {
+	graphic_clear_screen();
+	for (int i = 0; i < 84; i++)
+	{
+		graphic_pixel_set(s_start[i].x, s_start[i].y);
+	}
+	delay_micro(300);
+}
+
+void new_game(void)
+{
+	count_eaten_apples = 0;
+	firstD = '0';
+	
 	bool snake_dead = false;
 	snake_t snake;
 
 	graphic_initalize();
 	graphic_clear_screen();
-	init_app();
 	ascii_init();
 	print_text("Eaten apples: ");
 
@@ -539,10 +540,7 @@ void main(void)
 		
         snake_turn(&snake);
         snake_move(&snake);
-		draw_game(&snake, &apple);
-		// need some kinda of draw function 
-    
-		
+		draw_game(&snake, &apple);		
 		 if (snake_eat_apple(&apple, &snake)) 
 		{
 			printEatenApples();
@@ -551,6 +549,29 @@ void main(void)
 		delay_micro(150); 
     }
 	print_text("Game Over!");
-	
+}
 
+int stop_game(void)
+{
+	print_text("Play game? (1/0)");
+	while (1)
+	{
+		char input = keyb();
+		if (input == 1 || input == 0)
+			return input;
+	}
+	delay_micro(500);
+}
+// ------------------------------------------------------- GAME ------------------------------------------------------------------------------- //
+
+void main(void) 
+{
+	init_app();
+	write_logo();
+	while (stop_game())
+	{
+		new_game();
+	}
+	print_text("See you next time!");
+	
 }

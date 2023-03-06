@@ -28,6 +28,17 @@
 #define B_RW 2
 #define B_RS 1
 
+void ascii_write_cmd(unsigned char command);
+void ascii_write_data(unsigned char data);
+unsigned char ascii_read_status(void);
+unsigned char ascii_read_data(void);
+void ascii_write_controller(unsigned char byte);
+unsigned char ascii_read_controller(void);
+void ascii_command(unsigned char command);
+void ascii_init(void);
+void ascii_write_char(unsigned char c);
+void ascii_gotoxy(int x, int y);
+
 #define TIM6_CR1 ((volatile unsigned short *) 0x40001000)
 #define TIM6_CNT ((volatile unsigned short *) 0x40001024)
 #define TIM6_ARR ((volatile unsigned short *) 0x4000102C)
@@ -74,9 +85,20 @@ typedef struct {
 } snake_t;
 
 POINT snake_design[] = {{2,2},{1,2},{0,2},{-1,2},{-2,2},{-2,1},{-2,0},{-2,-1},{-2,-2},{-1,-2},{0,-2},{1,-2},{2,-2},{2,-1},{2,0},{2,1}};
-POINT apple_design[] = {{4,1},{0,3},{-1,2},{0,2},{1,2},{-2,1},{2,1},{-2,0},{2,0},{-1,-1},{0,-1},{1,-1},};
+POINT apple_design[] = {{0,1},{1,1},{1,0},{0,0},{2,0},{-1,0},{1,-1},{0,-1},{1,-1},{2,-1},{0,-2},{1,-2}};
 
+// ------------------------------------------------------- VARIABLES ------------------------------------------------------------------------------- //
+volatile int count_eaten_apples = 0;
+char firstD = '0';
+char lastD;
 // ------------------------------------------------------- FUNCTIONS ------------------------------------------------------------------------------- //
+void timer6_init(void)
+{
+	*TIM6_CR1 &= ~CEN; // Stops the counter module
+	*TIM6_ARR = 0xFFFF; // If its set to a low number, the random number will always be the upper bound because it counts to fast.
+	*TIM6_CR1 |= ( CEN | UDIS); // Activates the counter module and disables "update event"
+}
+
 
 void init_app(void)
 {
@@ -97,13 +119,8 @@ void init_app(void)
     * ( (volatile unsigned int *) 0x40020C0C) &= 0x00000000; // PUPDR CONFIG
     * ( (volatile unsigned int *) 0x40020C0C) |= 0x0000AAAA; // PUPDR CONFIG	
 
-}
+	timer6_init();
 
-void timer6_init(void)
-{
-	*TIM6_CR1 &= ~CEN; // Stops the counter module
-	*TIM6_ARR = 0xFFFF; // If its set to a low number, the random number will always be the upper bound because it counts to fast.
-	*TIM6_CR1 |= ( CEN | UDIS); // Activates the counter module and disables "update event"
 }
 
 // ------------------------------------------------------- DELAYS ------------------------------------------------------------------------------- //
@@ -205,6 +222,115 @@ unsigned char keyb(void)
     return  0xFF;
 }
 
+// ------------------------------------------------------- ASCII FUNCTIONS ------------------------------------------------------------------------------- //
+
+// B_SELECT is needed here to activate the ascii display
+void ascii_ctrl_bit_set(char x)
+{
+	char c;
+	c = *portOdrLow;
+	*portOdrLow = B_SELECT | x | c;
+}
+
+void ascii_ctrl_bit_clear(char x)
+{
+	char c;
+	c = *portOdrLow;
+	c = c & ~x;
+	*portOdrLow = B_SELECT | c;
+}
+
+void ascii_write_controller(unsigned char byte)
+{
+	// These delays are need for the processor to execute the respective functions.
+	delay_250ns(); // 40ns
+	ascii_ctrl_bit_set(B_E);
+	*portOdrHigh = byte;
+	delay_250ns(); //230ns
+	ascii_ctrl_bit_clear(B_E);
+	delay_250ns(); // 10ns 
+}
+
+void ascii_write_cmd(unsigned char command)
+{
+	ascii_ctrl_bit_clear(B_RS);
+	ascii_ctrl_bit_clear(B_RW);
+	ascii_write_controller(command);
+}
+
+void ascii_write_data(unsigned char data)
+{
+	ascii_ctrl_bit_set(B_RS);
+	ascii_ctrl_bit_clear(B_RW);
+	ascii_write_controller(data);
+}
+
+unsigned char ascii_read_controller(void)
+{
+	ascii_ctrl_bit_set(B_E);
+	delay_250ns();
+	delay_250ns(); // 360ns
+	unsigned char rv = *portIdrHigh;
+	ascii_ctrl_bit_clear(B_E);
+	return rv;
+}
+
+unsigned char ascii_read_status(void)
+{
+	*portModer = 0x00005555; // Set bit15-8 as input 
+	ascii_ctrl_bit_clear(B_RS);
+	ascii_ctrl_bit_set(B_RW);
+	unsigned char rv = ascii_read_controller();
+	*portModer = 0x55555555; // Set bit15-8 as output
+	return rv;
+}
+
+unsigned char ascii_read_data(void)
+{
+	*portModer = 0x00005555; // Set bit15-8 as input 
+	ascii_ctrl_bit_set(B_RS);
+	ascii_ctrl_bit_set(B_RW);
+	unsigned char rv = ascii_read_controller();
+	*portModer = 0x55555555; // Set bit15-8 as output 
+	return rv;
+}
+
+void ascii_command(unsigned char command)
+{
+	while( (ascii_read_status() & 0x80) == 0x80) // Wait for the display to be ready for instructions
+	{}
+	delay_micro(8);
+	ascii_write_cmd(command);
+	delay_micro(45);
+}
+
+void ascii_init(void)
+{
+	ascii_command(0x38); // 2 rows, 5x8 
+	ascii_command(0x0E); // Activate display, activate cursor and set it as constant 
+	ascii_command(0x01); // Clear Display
+	ascii_command(0x06); // Increment, No shift
+}
+
+void ascii_write_char(unsigned char c)
+{
+	while( (ascii_read_status() & 0x80) == 0x80) // Wait for the display to be ready for instructions
+	{}
+	delay_micro(8);
+	ascii_write_data(c);
+	delay_micro(45);
+}
+
+void ascii_gotoxy(int x, int y)
+{
+	unsigned char adress = x - 1;
+	if ( y == 2 )
+	{
+		adress = adress + 0x40;
+	}
+	ascii_write_cmd(0x80 | adress);
+}
+
 // ------------------------------------------------------- SNAKE FUNCTIONS ------------------------------------------------------------------------------- //
 void draw_clear_snake(snake_t *snake, int clear)
 {
@@ -221,6 +347,17 @@ void draw_clear_snake(snake_t *snake, int clear)
 	}
 }
 
+void draw_clear_apple(apple_t *apple, int clear)
+{
+	for (int i = 0; i < 12; i++)
+	{
+		if (clear)
+			graphic_pixel_clear(apple->x + apple_design[i].x, apple->y+ apple_design[i].y);
+		else
+			graphic_pixel_set(apple->x + apple_design[i].x, apple->y+ apple_design[i].y);
+	}
+}
+
 
 void apple_new(apple_t *apple, snake_t *snake) {
     // Draw random positions until position not hitting snake found
@@ -228,12 +365,12 @@ void apple_new(apple_t *apple, snake_t *snake) {
     int x_try, y_try;
     while (!ready)
     {
-        x_try = 1 + (char) *TIM6_CNT % (X_SIZE); // (char) *TIM6_CNT gets a random number 
-        y_try = 1 + (char) *TIM6_CNT % (Y_SIZE);
+        x_try = 20 + (char) *TIM6_CNT % (X_SIZE / 2); // (char) *TIM6_CNT gets a random number 
+        y_try = 7 + (char) *TIM6_CNT % (Y_SIZE / 2);
         ready = true;
         for (int i=0; i<snake->length && ready; ++i)
         {
-            if (x_try == snake->body_part[0].posx && y_try == snake->body_part[0].posy)
+            if ((x_try >= snake->body_part[i].posx - 2  && x_try <= snake->body_part[i].posx + 2) && (y_try >= snake->body_part[i].posy - 2 && y_try <= snake->body_part[i].posy + 2))
                 ready = false;
         }
     }
@@ -293,31 +430,15 @@ void snake_move(snake_t *snake)
 }
 
 bool snake_eat_apple(apple_t *apple, snake_t *snake) {
-    if (snake->body_part[0].posx == apple->x && snake->body_part[0].posy == apple->y)
+    if ((apple->x >= snake->body_part[0].posx - 3  && apple->x <= snake->body_part[0].posx + 2) && (apple->y >= snake->body_part[0].posy - 3 && apple->y <= snake->body_part[0].posy + 2))
     {
         // Can't increase the length of the snake.
+		draw_clear_apple(apple, 1);
         apple_new(apple, snake);
         snake->length++;
         int new = snake->length - 1;
-        
-        switch (snake->dir)
-        {
-        case UP:
-            snake->body_part[new].posx = snake->body_part[new - 1].posx;
-            snake->body_part[new].posy = snake->body_part[new - 1].posx + 1;
-        case DOWN:
-            snake->body_part[new].posx = snake->body_part[new - 1].posx;
-            snake->body_part[new].posy = snake->body_part[new - 1].posx - 1;
-        case LEFT:
-            snake->body_part[new].posx = snake->body_part[new - 1].posx - 1;
-            snake->body_part[new].posy = snake->body_part[new - 1].posx;
-            break;
-        default:
-            snake->body_part[new].posx = snake->body_part[new - 1].posx + 1;
-            snake->body_part[new].posx = snake->body_part[new - 1].posx;
-            break;
-        }
 
+		draw_clear_apple(apple, 0);
         return true;
     }
     return false;
@@ -341,19 +462,8 @@ bool snake_hit_self(snake_t *snake) {
 
 bool snake_hit_wall(snake_t *snake) 
 {
-    for (int i = 0; i < X_SIZE; i++)
-    {
-        if (snake->body_part[0].posx == i && (snake->body_part[0].posy == 0 || snake->body_part[0].posy == Y_SIZE))
-        {
-            return true;
-        }
-    }
-    for (int j = 0; j < Y_SIZE; j++)
-    {
-        if (snake->body_part[0].posy == j && (snake->body_part[0].posx == 0 || snake->body_part[0].posx == X_SIZE)) {
-            return true;
-        }
-    }
+    if (snake->body_part[0].posx + 2 >= X_SIZE || snake->body_part[0].posx + 2 <= 0 || snake->body_part[0].posy + 2 <= 0 || snake->body_part[0].posy + 2 >= Y_SIZE)
+		return true;
     return false;
 }
 
@@ -365,26 +475,45 @@ void init_snake(snake_t *snake)
 {
 	snake->length = 2;
 	snake->body_part[0].posx = 70;
-	snake->body_part[0].posy = 20;
+	snake->body_part[0].posy = 27;
 	snake->body_part[1].posx = 65;
-	snake->body_part[1].posy = 20;
+	snake->body_part[1].posy = 27;
 	snake->dir = RIGHT;
 }
 
-void draw_apple(apple_t *apple)
-{
-	for (int i = 0; i < 12; i++)
+void printEatenApples(){
+    ascii_gotoxy(14,1);
+    count_eaten_apples++;
+
+    
+    // fungerar bara upp till 99 sen börjar det om från 0
+    if (count_eaten_apples > 9) 
 	{
-		graphic_pixel_set(apple->x + apple_design[i].x, apple->y+ apple_design[i].y);
-	}
+        firstD++;
+		count_eaten_apples = 0;
+    }
+
+    lastD = '0' + count_eaten_apples;
+    ascii_write_char(firstD);
+    ascii_write_char(lastD);
 }
 
 void draw_game(snake_t *snake, apple_t *apple)
 {
 	draw_clear_snake(snake, 0);
-	draw_apple(apple);
+	draw_clear_apple(apple, 0);
 }
 
+void print_text(char text[])
+{
+	ascii_command(0x01); 
+	char *s = text;
+	while (*s)
+	{
+		ascii_write_char(*s++);
+	}
+	ascii_gotoxy(1, 2);
+}
 
 
 // ------------------------------------------------------- GAME ------------------------------------------------------------------------------- //
@@ -397,6 +526,8 @@ void main(void)
 	graphic_initalize();
 	graphic_clear_screen();
 	init_app();
+	ascii_init();
+	print_text("Eaten apples: ");
 
 	init_snake(&snake);
 	apple_t apple;
@@ -411,21 +542,15 @@ void main(void)
 		draw_game(&snake, &apple);
 		// need some kinda of draw function 
     
-		/*
+		
 		 if (snake_eat_apple(&apple, &snake)) 
 		{
-
+			printEatenApples();
         }
-        snake_dead = snake_hit_wall(&snake) || snake_hit_self(&snake);
-        if (snake_dead) 
-		{
-            
-        }
-        
-		*/
-		delay_micro(150);
-       
+        snake_dead = snake_hit_wall(&snake) || snake_hit_self(&snake);    
+		delay_micro(150); 
     }
+	print_text("Game Over!");
 	
 
 }

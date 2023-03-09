@@ -497,7 +497,7 @@ void print_text(char text[])
 void write_logo(void)
 {
 	graphic_clear_screen();
-	for (int i = 0; i < 600; i++)
+	for (int i = 0; i < 592; i++)
 	{
 		graphic_pixel_set(s_start[i].x, s_start[i].y);
 	}
